@@ -35,9 +35,11 @@ void GitAPI::_commit(const String p_msg) {
 	for (int i = 0; i < staged_files.size(); i++) {
 		String file_path = staged_files[i];
 		File *file = File::_new();
-		if (file->file_exists(file_path)) {
+		if (file->file_exists(_repo_dir()+file_path)) {
+			WARN_PRINT(file_path + "exists. Adding");
 			GIT2_CALL(git_index_add_bypath(repo_index, file_path.alloc_c_string()), "Could not add file by path", NULL);
 		} else {
+			WARN_PRINT(file_path + " does not exist");
 			GIT2_CALL(git_index_remove_bypath(repo_index, file_path.alloc_c_string()), "Could not add file by path", NULL);
 		}
 	}
@@ -73,6 +75,7 @@ void GitAPI::_commit(const String p_msg) {
 }
 
 void GitAPI::_stage_file(const String p_file_path) {
+	WARN_PRINT(p_file_path);
 	if (staged_files.find(p_file_path) == -1) {
 		staged_files.push_back(p_file_path);
 	}
@@ -255,18 +258,30 @@ bool GitAPI::_initialize(const String p_project_root_path) {
 		return true;
 	}
 
-	can_commit = true;
-	GIT2_CALL(git_repository_init(&repo, p_project_root_path.alloc_c_string(), 0), "Could not initialize repository", NULL);
-	if (git_repository_head_unborn(repo) == 1) {
-		create_gitignore_and_gitattributes();
-		if (!create_initial_commit()) {
-			godot::Godot::print_error("Initial commit could not be created. Commit functionality will not work.", __func__, __FILE__, __LINE__);
-			can_commit = false;
-		}
-	}
+	//Walk up the tree and see if there is an already initialized repo to open.
+	WARN_PRINT(p_project_root_path);
+	GIT2_CALL(git_repository_open_ext(&repo, p_project_root_path.alloc_c_string(), 0, NULL), "Could not open repository", NULL);
 
-	GIT2_CALL(git_repository_open(&repo, p_project_root_path.alloc_c_string()), "Could not open repository", NULL);
-	is_initialized = true;
+
+	can_commit = true;
+	//If there is no pre-existing repo, initialize a new repo at the project root.
+	if (!repo) {
+		GIT2_CALL(git_repository_init(&repo, p_project_root_path.alloc_c_string(), 0), "Could not initialize repository", NULL);
+		if (git_repository_head_unborn(repo) == 1) {
+			create_gitignore_and_gitattributes();
+			if (!create_initial_commit()) {
+				godot::Godot::print_error("Initial commit could not be created. Commit functionality will not work.", __func__, __FILE__, __LINE__);
+				can_commit = false;
+			}
+		}
+
+		GIT2_CALL(git_repository_open(&repo, p_project_root_path.alloc_c_string()), "Could not open repository", NULL);
+		is_initialized = true;
+	}	
+	else {		
+		WARN_PRINT(_repo_dir());
+		is_initialized = true;
+	}
 
 	return is_initialized;
 }
@@ -277,6 +292,18 @@ bool GitAPI::_shut_down() {
 	GIT2_CALL(git_libgit2_shutdown(), "Could not shutdown Git Addon", NULL);
 
 	return true;
+}
+
+String GitAPI::_repo_dir() {
+
+	if (repo) {
+		String repo_dir = String(git_repository_commondir(repo));
+		repo_dir.erase(repo_dir.length() - 5, 5);
+
+		return (repo_dir);
+	} else {
+		return (String("No Repo Found"));
+	}
 }
 
 void GitAPI::_init() {
