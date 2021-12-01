@@ -29,7 +29,7 @@ class GitAPI : public EditorVCSInterface {
 	PanelContainer *init_settings_panel_container;
 	Button *init_settings_button;
 
-	git_repository *repo = nullptr;
+	git_repository *repo = nullptr;	
 
 	void _commit(const String p_msg);
 	bool _is_vcs_initialized();
@@ -41,6 +41,7 @@ class GitAPI : public EditorVCSInterface {
 	bool _shut_down();
 	void _stage_file(const String p_file_path);
 	void _unstage_file(const String p_file_path);
+	String _repo_dir();
 
 public:
 	static void _register_methods();
